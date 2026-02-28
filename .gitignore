@@ -1,0 +1,25 @@
+# Rust build artifacts
+/target/
+**/*.rs.bk
+
+# Cargo
+/.cargo/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Docker overrides
+docker-compose.override.yml
+
+# Logs and temp files
+*.log
+*.tmp
+.DS_Store
+
+# IDE/editor
+.idea/
+.vscode/
+*.swp
+*.swo
