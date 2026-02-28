@@ -1,0 +1,73 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: clob-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-clob}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-clob}
+      POSTGRES_DB: ${POSTGRES_DB:-clob}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-clob} -d ${POSTGRES_DB:-clob}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: clob-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  migrator:
+    image: postgres:16
+    container_name: clob-migrator
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgres://clob:clob@postgres:5432/clob}
+      MIGRATION_COMMAND: ${MIGRATION_COMMAND:-echo 'No migration command configured. Skipping migrations.'}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["${MIGRATION_COMMAND}"]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      dockerfile: ${APP_DOCKERFILE:-Dockerfile}
+      args:
+        APP_BIN: ${APP_BIN:-clob-api}
+    container_name: clob-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrator:
+        condition: service_completed_successfully
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      APP_PORT: ${APP_PORT:-8080}
+      DATABASE_URL: ${DATABASE_URL:-postgres://clob:clob@postgres:5432/clob}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  pg_data:
+  redis_data:
