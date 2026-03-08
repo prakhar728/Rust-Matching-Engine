@@ -29,3 +29,30 @@
 - `src/events/mod.rs` — event enum (OrderPlaced, OrderCancelled, Fill) + SequencedEvent wrapper
 - `src/sequencer/mod.rs` — monotonic seq_id assignment, idempotency check, append-only log
 - `src/engine/orderbook.rs` — in-memory BTreeMap book, price-time priority structure
+
+## 2026-03-08
+### Goal
+- Implement events and sequencer modules.
+
+### Work Done
+- Wrote `src/events/mod.rs`:
+  - `Event` enum with full payload: OrderAccepted, OrderRejected, Fill, OrderCancelled, MarketPaused, MarketResumed
+  - `CancelReason` enum: TraderRequest, Expired, SelfTradePrevention, AdminForce
+  - `SequencedEvent` — wraps Event with seq_id and timestamp_ms
+  - `Event::market_id()` helper for downstream filtering
+- Wrote `src/sequencer/mod.rs`:
+  - Monotonic seq_id counter starting at 1, no gaps
+  - `append_event()` — assigns seq_id, wall-clock stamp, appends to log
+  - `peek_next_seq_id()` — engine uses this to pre-set order.created_sequence
+  - `idempotency_check()` + `register_accepted()` — duplicate submission detection keyed by (trader_id, client_order_id)
+  - `resume()` — rebuilds idempotency table from prior event log for crash recovery
+
+### Commands Run
+- `cargo test`
+
+### Result
+- Pass — 32/32 tests green
+
+### Next
+- `src/engine/orderbook.rs` — in-memory BTreeMap book (price-time priority structure)
+- `src/engine/matching.rs` — matching loop with STP, partial fills
