@@ -56,3 +56,31 @@
 ### Next
 - `src/engine/orderbook.rs` — in-memory BTreeMap book (price-time priority structure)
 - `src/engine/matching.rs` — matching loop with STP, partial fills
+
+## 2026-03-08 (continued)
+### Goal
+- Implement in-memory orderbook and matching engine.
+
+### Work Done
+- Wrote `src/engine/orderbook.rs`:
+  - BTreeMap<price, VecDeque<OrderId>> for bids and asks (price-time priority structure)
+  - `insert`, `cancel` (idempotent), `remove_from_queue`
+  - `best_bid` / `best_ask` — O(1) BTreeMap first/last key
+  - `ask_prices_asc` / `bid_prices_desc` return owned Vecs for borrow-safe matching
+  - `l2_bids` / `l2_asks` — aggregated depth snapshots for REST API
+- Wrote `src/engine/matching.rs`:
+  - `match_order` entry point dispatches to buy/sell path
+  - Price-time priority: sorted prices, FIFO queue per level
+  - STP Cancel Taker: taker set to CancelledStp, maker untouched
+  - MakerSnapshot pattern to avoid simultaneous borrows on OrderBook
+  - Partial fills supported: both taker-partial and maker-partial
+
+### Commands Run
+- `cargo test`
+
+### Result
+- Pass — 59/59 tests green
+
+### Next
+- `src/replay/mod.rs` — deterministic rebuild from event log
+- `src/engine/mod.rs` — Engine struct tying orderbook + sequencer + state together
