@@ -58,6 +58,12 @@ pub struct OrderBook {
     orders: HashMap<OrderId, Order>,
 }
 
+impl Default for OrderBook {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OrderBook {
     pub fn new() -> Self {
         Self {
@@ -84,8 +90,8 @@ impl OrderBook {
 
         // Push to the back of the price-level queue (newest = lowest priority)
         match side {
-            Side::Buy => self.bids.entry(price).or_insert_with(VecDeque::new).push_back(id),
-            Side::Sell => self.asks.entry(price).or_insert_with(VecDeque::new).push_back(id),
+            Side::Buy => self.bids.entry(price).or_default().push_back(id),
+            Side::Sell => self.asks.entry(price).or_default().push_back(id),
         }
     }
 

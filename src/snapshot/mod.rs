@@ -184,7 +184,7 @@ pub fn find_latest_snapshot(dir: &Path) -> Option<PathBuf> {
         let stem = path.file_stem()?.to_str()?;
         // Parse "snapshot_{seq_id}" filename.
         let seq: u64 = stem.strip_prefix("snapshot_")?.parse().ok()?;
-        if best.as_ref().map_or(true, |(s, _)| seq > *s) {
+        if best.as_ref().is_none_or(|(s, _)| seq > *s) {
             best = Some((seq, path));
         }
     }
