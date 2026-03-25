@@ -47,7 +47,7 @@ use crate::sequencer::Sequencer;
 pub struct OrderResult {
     /// Server-assigned order ID (UUIDv4).
     pub order_id: OrderId,
-    /// Canonical SHA-256 hash of the order — the stable on-chain key.
+    /// Canonical SHA-256 hash of the order — the stable persistent key.
     pub order_hash: OrderHash,
     /// Sequence number of the OrderAccepted event in the log.
     pub seq_id: u64,
@@ -92,7 +92,7 @@ pub struct Engine {
     /// Global monotonic event sequencer + idempotency table.
     pub sequencer: Sequencer,
 
-    /// NEAR-compatible state store (filled_amounts, cancelled, nonces, balances).
+    /// Persistent state store (filled_amounts, cancelled, nonces, balances).
     pub state: StateStore,
 
     /// Fast O(1) lookup: order_id → market_id.

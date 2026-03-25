@@ -2,14 +2,13 @@
 //
 // This is the most critical module in the codebase. The canonical hash and
 // signature verification defined here are the foundation of:
-//   1. Off-chain replay integrity — same input always hashes to same value.
-//   2. On-chain compatibility — the NEAR contract will verify the same hash.
+//   1. Replay integrity — same input always hashes to same value.
+//   2. Tamper detection — any field mutation invalidates the ed25519 signature.
 //
 // READ BEFORE TOUCHING:
-//   The `canonical_hash()` byte layout is FROZEN after Phase -1 launches.
-//   Changing the encoding breaks all existing signed orders and any future
-//   on-chain verification. If a breaking change is ever needed, bump
-//   CURRENT_SCHEMA_VERSION and add a dual-parser window.
+//   The `canonical_hash()` byte layout is frozen. Changing the encoding
+//   invalidates all existing signed orders. If a breaking change is ever
+//   needed, bump CURRENT_SCHEMA_VERSION and add a dual-parser window.
 
 use sha2::{Digest, Sha256};
 use serde::{Deserialize, Serialize};
@@ -186,11 +185,9 @@ pub struct SignedOrder {
 
 /// Stable, canonical SHA-256 fingerprint of a SignedOrder's content.
 ///
-/// This is the on-chain-compatible identifier for an order. It is used as
-/// the key for:
-///   - `filled_amount[order_hash]` in the state store
-///   - `cancelled[order_hash]` in the state store
-///   - Future: settlement batch verification in the NEAR contract
+/// Used as the key for fill and cancel tracking in the state store:
+///   - `filled_amount[order_hash]`
+///   - `cancelled[order_hash]`
 ///
 /// Computed once on intake. Never changes for the lifetime of an order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -207,7 +204,7 @@ impl OrderHash {
 ///
 /// Generated as UUIDv4 on acceptance. This is what clients receive back
 /// and use for cancel-by-order-id calls. It is NOT part of the canonical
-/// hash — the order_hash is the stable on-chain key, not this ID.
+/// hash — the order_hash is the stable persistent key, not this ID.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct OrderId(pub String);
 
@@ -224,7 +221,7 @@ pub struct Order {
     /// Client-provided idempotency key.
     pub client_order_id: String,
 
-    /// Stable canonical hash. The on-chain-compatible identifier.
+    /// Stable canonical hash. The persistent identifier for this order.
     pub order_hash: OrderHash,
 
     pub market_id: MarketId,
@@ -283,7 +280,6 @@ impl Order {
 ///   1. Increases filled_size_lots for both the taker and the maker.
 ///   2. Updates filled_amount[order_hash] in the state store for both sides.
 ///   3. Is recorded as an event in the append-only event log.
-///   4. Will eventually map to a settlement instruction in the NEAR contract.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Fill {
     pub market_id: MarketId,

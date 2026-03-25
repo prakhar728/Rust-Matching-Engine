@@ -4,12 +4,10 @@
 // Every state change in the engine must go through here before it takes effect.
 //
 // Why does this matter?
-//   In a distributed system you need a total order over events to guarantee
-//   deterministic replay. In V1 we have a single-operator setup, so the
-//   sequencer is just an atomic counter + append-only log. The architecture
-//   is written so this can later be replaced with a decentralized sequencer
-//   (e.g. a NEAR contract or a consensus layer) without changing the rest of
-//   the engine.
+//   In any exchange you need a total order over events to guarantee
+//   deterministic replay. The sequencer is an atomic counter + append-only
+//   log. All state mutations are routed through it, so the event log is
+//   always the authoritative record of what happened and in what order.
 //
 // Key invariants (from phase_-1.md §7):
 //   1. seq_ids are strictly increasing starting from 1, with no gaps.

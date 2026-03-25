@@ -53,7 +53,7 @@ pub struct ReplayResult {
     /// One OrderBook per market — contains only the currently-open resting orders.
     pub books: HashMap<String, OrderBook>,
 
-    /// NEAR-compatible state store — filled_amounts, cancelled, nonces.
+    /// Reconstructed state store — filled_amounts, cancelled, nonces.
     pub state: StateStore,
 
     /// The highest seq_id seen during this replay (0 if the log was empty).
