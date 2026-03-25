@@ -1,18 +1,12 @@
-// StateStore — the NEAR-compatible in-memory state model.
+// StateStore — the persistence model for order lifecycle state.
 //
-// This is the minimal state that will be moved on-chain when we integrate
-// with NEAR. Every field here has a direct on-chain equivalent:
+// Tracks the authoritative state for fills, cancels, nonces, and balances.
+// Kept separate from the OrderBook intentionally:
 //
-//   filled_amounts  →  filled_amount[order_hash]  (NEP-contract storage map)
-//   cancelled       →  cancelled[order_hash]       (NEP-contract storage map)
-//   nonces          →  nonce[trader_account]        (per-account monotonic counter)
-//   balances        →  vault balances               (replaced by on-chain custody later)
-//
-// Why keep this separate from the OrderBook?
-//   The OrderBook is a runtime data structure optimised for matching speed.
-//   The StateStore is the persistence model optimised for on-chain compatibility.
-//   They stay in sync through the engine, but the StateStore can be serialised
-//   independently and compared with on-chain state for audit.
+//   The OrderBook is a runtime structure optimised for matching speed.
+//   The StateStore is the persistence model optimised for auditability.
+//   They stay in sync through the engine, but the StateStore can be
+//   serialised independently and verified against any external system.
 
 use std::collections::HashMap;
 use sha2::{Digest, Sha256};
@@ -50,8 +44,7 @@ pub struct StateStore {
     /// Key: (trader_id, asset_symbol) e.g. ("deadbeef...", "USDC")
     /// Value: available balance in integer units.
     ///
-    /// Phase -1: simple in-memory map; no locked/available split.
-    /// Phase 1+: replaced by on-chain vault accounting (NEP-141 deposits).
+    /// Simple in-memory map; no locked/available split.
     pub balances: HashMap<(String, String), u64>,
 }
 
@@ -108,7 +101,7 @@ impl StateStore {
     /// On Ok, the stored nonce is advanced to `nonce`.
     ///
     /// Strict monotonic policy: orders must be submitted in nonce order.
-    /// This matches the NEAR contract's nonce semantics (per-account counter).
+    /// Standard per-account monotonic counter — prevents replay of old signed orders.
     pub fn check_and_update_nonce(
         &mut self,
         trader_id: &str,
@@ -174,9 +167,9 @@ impl StateStore {
     /// Compute a deterministic SHA-256 fingerprint of the current state.
     ///
     /// Used to verify that two replay runs produce identical state.
-    /// The hash covers filled_amounts, cancelled, and nonces — the three
-    /// fields that will exist on-chain. Balances are excluded as they will
-    /// be replaced by vault accounting in Phase 1+.
+    /// The hash covers filled_amounts, cancelled, and nonces.
+    /// Balances are excluded — they are derived from fills and not
+    /// needed for replay correctness verification.
     ///
     /// Determinism guarantee: entries are sorted before hashing so that
     /// HashMap iteration order (which is random) does not affect the result.
