@@ -118,7 +118,7 @@ impl WsEnvelope {
                 envelopes
             }
 
-            Event::OrderCancelled { order_id, .. } => {
+            Event::OrderCancelled { order_id: _, .. } => {
                 // We don't know the market_id or trader_id from the cancel event alone
                 // (the engine doesn't embed them to keep the event compact).
                 // Publish to a generic cancels channel; the private orders channel

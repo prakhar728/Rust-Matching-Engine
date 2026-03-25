@@ -55,6 +55,12 @@ pub struct StateStore {
     pub balances: HashMap<(String, String), u64>,
 }
 
+impl Default for StateStore {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StateStore {
     pub fn new() -> Self {
         Self {

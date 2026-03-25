@@ -84,6 +84,12 @@ pub struct Sequencer {
     idempotency: HashMap<IdempotencyKey, IdempotencyRecord>,
 }
 
+impl Default for Sequencer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Sequencer {
     /// Create a new sequencer starting from seq_id = 1.
     /// Used on a fresh start when there's no existing event log to resume from.
@@ -228,7 +234,7 @@ fn current_time_ms() -> u64 {
 mod tests {
     use super::*;
     use crate::domain::market::MarketId;
-    use crate::events::{CancelReason, Event};
+    use crate::events::Event;
     use crate::domain::order::{Order, OrderHash, OrderId, OrderStatus, Side, TimeInForce};
 
     fn pause_event() -> Event {

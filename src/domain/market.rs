@@ -97,7 +97,7 @@ impl MarketConfig {
         if price_ticks == 0 {
             return Err(MarketError::ZeroPrice);
         }
-        if price_ticks % self.tick_size != 0 {
+        if !price_ticks.is_multiple_of(self.tick_size) {
             return Err(MarketError::InvalidTick {
                 price: price_ticks,
                 tick_size: self.tick_size,
@@ -114,7 +114,7 @@ impl MarketConfig {
         if size_lots == 0 {
             return Err(MarketError::ZeroSize);
         }
-        if size_lots % self.lot_size != 0 {
+        if !size_lots.is_multiple_of(self.lot_size) {
             return Err(MarketError::InvalidLot {
                 size: size_lots,
                 lot_size: self.lot_size,
