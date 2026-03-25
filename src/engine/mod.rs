@@ -29,10 +29,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 use crate::db::{NonceError, StateStore};
-use crate::domain::market::{MarketConfig, MarketId};
+use crate::domain::market::MarketConfig;
 use crate::domain::order::{
-    Fill, Order, OrderError, OrderHash, OrderId, OrderStatus, SignedOrder, Side, TimeInForce,
-    CURRENT_SCHEMA_VERSION,
+    Fill, Order, OrderError, OrderHash, OrderId, OrderStatus, SignedOrder,
 };
 use crate::engine::matching::match_order;
 use crate::engine::orderbook::OrderBook;
@@ -108,6 +107,12 @@ pub struct Engine {
     clock: Box<dyn Fn() -> u64 + Send + Sync>,
 }
 
+impl Default for Engine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Engine {
     /// Create a new engine with the system clock.
     pub fn new() -> Self {
@@ -140,7 +145,7 @@ impl Engine {
     /// Safe to call multiple times — overwrites the existing config (e.g. for status updates).
     pub fn add_market(&mut self, config: MarketConfig) {
         let id = config.id.0.clone();
-        self.books.entry(id.clone()).or_insert_with(OrderBook::new);
+        self.books.entry(id.clone()).or_default();
         self.markets.insert(id, config);
     }
 
@@ -183,7 +188,7 @@ impl Engine {
         // ── 5. Tick and lot alignment ─────────────────────────────────────────
         market
             .validate_price(signed.price_ticks)
-            .map_err(|e| EngineError::Order(OrderError::InvalidTick {
+            .map_err(|_| EngineError::Order(OrderError::InvalidTick {
                 price: signed.price_ticks,
                 tick_size: market.tick_size,
             }))?;
@@ -221,7 +226,7 @@ impl Engine {
         // Nonce must be strictly greater than the last accepted nonce.
         self.state
             .check_and_update_nonce(&signed.trader_id, signed.nonce)
-            .map_err(|e| EngineError::Nonce(e))?;
+            .map_err(EngineError::Nonce)?;
 
         // ── 8. Build Order and sequence the OrderAccepted event ───────────────
         let order_hash = signed.canonical_hash();

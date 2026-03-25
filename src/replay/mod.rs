@@ -224,7 +224,7 @@ pub fn replay(events: &[SequencedEvent]) -> Result<ReplayResult, ReplayError> {
     for order in open_orders {
         let book = books
             .entry(order.market_id.0.clone())
-            .or_insert_with(OrderBook::new);
+            .or_default();
         book.insert(order.clone());
     }
 

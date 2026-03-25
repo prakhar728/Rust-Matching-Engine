@@ -26,8 +26,6 @@
 //   GET    /v1/trades/:market_id          — fills from the event log (?limit=N&from_seq=N)
 //   GET    /v1/markets                    — list all registered markets
 
-use std::sync::Arc;
-
 use axum::{
     Json, Router,
     extract::{Path, Query, State},
@@ -37,10 +35,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::api::{AppState, SharedState};
+use crate::api::AppState;
 use crate::domain::market::MarketConfig;
 use crate::domain::order::{Fill, Order, OrderId, OrderStatus, SignedOrder};
-use crate::engine::{CancelError, Engine, EngineError, OrderResult};
+use crate::engine::{CancelError, EngineError, OrderResult};
 use crate::ops::admin::{self, AdminError};
 use crate::risk::RiskError;
 
@@ -639,8 +637,10 @@ mod tests {
     use axum::http::{Method, Request};
     use tower::ServiceExt;
 
+    use crate::api::SharedState;
     use crate::domain::market::{MarketConfig, MarketId, MarketStatus};
     use crate::domain::order::{Side, TimeInForce, CURRENT_SCHEMA_VERSION};
+    use crate::engine::Engine;
     use ed25519_dalek::{Signer, SigningKey};
     use rand::rngs::OsRng;
 
