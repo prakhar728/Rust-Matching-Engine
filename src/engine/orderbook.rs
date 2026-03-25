@@ -44,6 +44,7 @@ pub struct PriceLevel {
 // OrderBook
 // ---------------------------------------------------------------------------
 
+#[derive(Debug)]
 pub struct OrderBook {
     /// Buy-side price levels. Natural BTreeMap iteration is ascending;
     /// we use `.rev()` wherever we need highest bid first.
@@ -93,6 +94,15 @@ impl OrderBook {
     /// Returns `true` if the order was found and cancelled.
     /// Returns `false` if not found or already closed (idempotent).
     pub fn cancel(&mut self, id: &OrderId) -> bool {
+        self.cancel_with_status(id, OrderStatus::Cancelled)
+    }
+
+    /// Cancel an order with a specific final status.
+    ///
+    /// Used by replay to set `CancelledStp` correctly — in the live engine,
+    /// STP status is set by the matching loop before the order ever touches
+    /// the book, but during replay we insert first and cancel second.
+    pub fn cancel_with_status(&mut self, id: &OrderId, status: OrderStatus) -> bool {
         let order = match self.orders.get_mut(id) {
             Some(o) => o,
             None => return false,
@@ -102,9 +112,7 @@ impl OrderBook {
             return false; // already done — idempotent cancel is fine
         }
 
-        order.status = OrderStatus::Cancelled;
-
-        // Remove from the price-level queue so it's no longer matchable
+        order.status = status;
         self.remove_from_queue_inner(id);
 
         true

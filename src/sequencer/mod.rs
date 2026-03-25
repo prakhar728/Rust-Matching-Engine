@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use serde::{Deserialize, Serialize};
 use crate::events::{Event, SequencedEvent};
+use crate::domain::order::{OrderHash, OrderId};
 
 // ---------------------------------------------------------------------------
 // Idempotency key
@@ -43,6 +44,10 @@ pub struct IdempotencyKey {
 pub struct IdempotencyRecord {
     /// The seq_id of the original OrderAccepted event.
     pub original_seq_id: u64,
+    /// The server-assigned order ID — returned to the client on duplicate.
+    pub order_id: OrderId,
+    /// The canonical hash — returned to the client on duplicate.
+    pub order_hash: OrderHash,
     /// When it was first accepted (epoch ms).
     pub accepted_at_ms: u64,
 }
@@ -104,6 +109,8 @@ impl Sequencer {
                 };
                 idempotency.insert(key, IdempotencyRecord {
                     original_seq_id: ev.seq_id,
+                    order_id: order.order_id.clone(),
+                    order_hash: order.order_hash,
                     accepted_at_ms: ev.timestamp_ms,
                 });
             }
@@ -174,6 +181,8 @@ impl Sequencer {
         trader_id: &str,
         client_order_id: &str,
         seq_id: u64,
+        order_id: OrderId,
+        order_hash: OrderHash,
         accepted_at_ms: u64,
     ) {
         let key = IdempotencyKey {
@@ -182,6 +191,8 @@ impl Sequencer {
         };
         self.idempotency.insert(key, IdempotencyRecord {
             original_seq_id: seq_id,
+            order_id,
+            order_hash,
             accepted_at_ms,
         });
     }
@@ -218,7 +229,7 @@ mod tests {
     use super::*;
     use crate::domain::market::MarketId;
     use crate::events::{CancelReason, Event};
-    use crate::domain::order::{OrderHash, OrderId};
+    use crate::domain::order::{Order, OrderHash, OrderId, OrderStatus, Side, TimeInForce};
 
     fn pause_event() -> Event {
         Event::MarketPaused {
@@ -275,7 +286,7 @@ mod tests {
     #[test]
     fn idempotency_check_returns_record_after_registration() {
         let mut seq = Sequencer::new();
-        seq.register_accepted("trader-1", "order-abc", 5, 1_000_000);
+        seq.register_accepted("trader-1", "order-abc", 5, OrderId("oid-1".into()), OrderHash([0u8; 32]), 1_000_000);
 
         let record = seq.idempotency_check("trader-1", "order-abc");
         assert!(record.is_some());
@@ -285,8 +296,8 @@ mod tests {
     #[test]
     fn idempotency_is_keyed_by_trader_and_client_order_id() {
         let mut seq = Sequencer::new();
-        seq.register_accepted("trader-1", "order-abc", 1, 0);
-        seq.register_accepted("trader-2", "order-abc", 2, 0);
+        seq.register_accepted("trader-1", "order-abc", 1, OrderId("oid-1".into()), OrderHash([0u8; 32]), 0);
+        seq.register_accepted("trader-2", "order-abc", 2, OrderId("oid-2".into()), OrderHash([0u8; 32]), 0);
 
         // Same client_order_id but different trader_id — these are separate
         assert_eq!(seq.idempotency_check("trader-1", "order-abc").unwrap().original_seq_id, 1);
@@ -312,9 +323,7 @@ mod tests {
     fn resume_rebuilds_idempotency_from_existing_log() {
         // Simulate a crash-recovery scenario: we have an existing log from
         // a previous session with one accepted order.
-        use crate::domain::order::{
-            Order, OrderHash, OrderId, OrderStatus, Side, TimeInForce,
-        };
+    
 
         let order = Order {
             order_id: OrderId("oid-1".into()),
