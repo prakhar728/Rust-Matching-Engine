@@ -530,6 +530,36 @@ async fn list_markets(State(state): State<AppState>) -> Json<Vec<MarketResponse>
 }
 
 // ---------------------------------------------------------------------------
+// Admin auth
+// ---------------------------------------------------------------------------
+
+/// Validate the `X-Admin-Key` header against the configured admin key.
+///
+/// Returns `Err(401)` if:
+///   - No admin key is configured (`SharedState.admin_key` is empty)
+///   - The header is missing
+///   - The header value does not match the configured key
+fn require_admin_key(state: &AppState, headers: &HeaderMap) -> Result<(), ErrorResponse> {
+    if state.admin_key.is_empty() {
+        return Err(ErrorResponse(
+            StatusCode::UNAUTHORIZED,
+            ApiError::new("ADMIN_DISABLED", "admin key not configured"),
+        ));
+    }
+    let provided = headers
+        .get("X-Admin-Key")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("");
+    if provided != state.admin_key {
+        return Err(ErrorResponse(
+            StatusCode::UNAUTHORIZED,
+            ApiError::new("INVALID_ADMIN_KEY", "invalid or missing X-Admin-Key header"),
+        ));
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
 // Admin handlers
 // ---------------------------------------------------------------------------
 
@@ -553,9 +583,11 @@ struct AdminCancelAllResponse {
 /// POST /v1/admin/markets/:market_id/pause
 async fn admin_pause_market(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(market_id): Path<String>,
     Json(body): Json<AdminActionRequest>,
 ) -> Result<Json<AdminPauseResumeResponse>, ErrorResponse> {
+    require_admin_key(&state, &headers)?;
     let (seq_id, seq_before) = {
         let mut engine = state.engine.lock().await;
         let seq_before = engine.sequencer.peek_next_seq_id().saturating_sub(1);
@@ -571,9 +603,11 @@ async fn admin_pause_market(
 /// POST /v1/admin/markets/:market_id/resume
 async fn admin_resume_market(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(market_id): Path<String>,
     Json(body): Json<AdminActionRequest>,
 ) -> Result<Json<AdminPauseResumeResponse>, ErrorResponse> {
+    require_admin_key(&state, &headers)?;
     let (seq_id, seq_before) = {
         let mut engine = state.engine.lock().await;
         let seq_before = engine.sequencer.peek_next_seq_id().saturating_sub(1);
@@ -589,8 +623,10 @@ async fn admin_resume_market(
 /// POST /v1/admin/markets/:market_id/cancel-all
 async fn admin_cancel_all(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(market_id): Path<String>,
 ) -> Result<Json<AdminCancelAllResponse>, ErrorResponse> {
+    require_admin_key(&state, &headers)?;
     let (count, seq_before) = {
         let mut engine = state.engine.lock().await;
         let seq_before = engine.sequencer.peek_next_seq_id().saturating_sub(1);
@@ -972,5 +1008,74 @@ mod tests {
         assert_eq!(resp.status(), StatusCode::OK);
         let body = body_json(resp).await;
         assert_eq!(body["was_already_closed"], false);
+    }
+
+    // ── Admin auth tests ──────────────────────────────────────────────────────
+
+    fn admin_state_with_key(key: &str) -> AppState {
+        let mut engine = Engine::with_clock(
+            Box::new(|| 1_000_000u64) as Box<dyn Fn() -> u64 + Send + Sync>,
+        );
+        engine.add_market(MarketConfig {
+            id: MarketId("BTC-USDC".into()),
+            base_asset: "BTC".into(),
+            quote_asset: "USDC".into(),
+            tick_size: 1_000,
+            lot_size: 1,
+            fee_bps_maker: 10,
+            fee_bps_taker: 20,
+            status: MarketStatus::Active,
+        });
+        SharedState::with_admin_key(engine, key)
+    }
+
+    async fn admin_pause(app: &Router, admin_key: Option<&str>) -> axum::response::Response {
+        let mut builder = Request::builder()
+            .method(Method::POST)
+            .uri("/v1/admin/markets/BTC-USDC/pause")
+            .header("content-type", "application/json");
+        if let Some(k) = admin_key {
+            builder = builder.header("X-Admin-Key", k);
+        }
+        let body = serde_json::to_vec(&serde_json::json!({"triggered_by": "test"})).unwrap();
+        app.clone()
+            .oneshot(builder.body(Body::from(body)).unwrap())
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn admin_no_key_configured_returns_401() {
+        // admin_key is empty string — all admin requests must be rejected.
+        let app = make_app(admin_state_with_key(""));
+        let resp = admin_pause(&app, Some("any-key")).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let body = body_json(resp).await;
+        assert_eq!(body["code"], "ADMIN_DISABLED");
+    }
+
+    #[tokio::test]
+    async fn admin_missing_header_returns_401() {
+        let app = make_app(admin_state_with_key("secret"));
+        let resp = admin_pause(&app, None).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let body = body_json(resp).await;
+        assert_eq!(body["code"], "INVALID_ADMIN_KEY");
+    }
+
+    #[tokio::test]
+    async fn admin_wrong_key_returns_401() {
+        let app = make_app(admin_state_with_key("secret"));
+        let resp = admin_pause(&app, Some("wrong")).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        let body = body_json(resp).await;
+        assert_eq!(body["code"], "INVALID_ADMIN_KEY");
+    }
+
+    #[tokio::test]
+    async fn admin_correct_key_returns_200() {
+        let app = make_app(admin_state_with_key("secret"));
+        let resp = admin_pause(&app, Some("secret")).await;
+        assert_eq!(resp.status(), StatusCode::OK);
     }
 }
