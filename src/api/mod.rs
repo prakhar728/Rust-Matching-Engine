@@ -178,6 +178,10 @@ pub struct SharedState {
     /// Broadcast sender — REST handlers publish here after every engine call.
     /// WS handlers subscribe to receive live events.
     pub events: broadcast::Sender<Arc<WsEnvelope>>,
+
+    /// Secret key required in the `X-Admin-Key` header for admin endpoints.
+    /// Empty string means admin endpoints are disabled (reject all requests).
+    pub admin_key: String,
 }
 
 /// The axum application state type alias.
@@ -190,23 +194,39 @@ impl SharedState {
 
     /// Construct with a custom RiskChecker (no Postgres — used in tests).
     pub fn with_risk(engine: Engine, risk: RiskChecker) -> AppState {
+        let admin_key = std::env::var("ADMIN_KEY").unwrap_or_default();
         let (tx, _) = broadcast::channel(BROADCAST_CAPACITY);
         Arc::new(Self {
             engine: Mutex::new(engine),
             risk: Mutex::new(risk),
             pg: None,
             events: tx,
+            admin_key,
         })
     }
 
     /// Construct with both a custom RiskChecker and a PgStore.
     pub fn with_pg(engine: Engine, risk: RiskChecker, store: PgStore) -> AppState {
+        let admin_key = std::env::var("ADMIN_KEY").unwrap_or_default();
         let (tx, _) = broadcast::channel(BROADCAST_CAPACITY);
         Arc::new(Self {
             engine: Mutex::new(engine),
             risk: Mutex::new(risk),
             pg: Some(Arc::new(store)),
             events: tx,
+            admin_key,
+        })
+    }
+
+    /// Construct with an explicit admin key — used in tests.
+    pub fn with_admin_key(engine: Engine, admin_key: impl Into<String>) -> AppState {
+        let (tx, _) = broadcast::channel(BROADCAST_CAPACITY);
+        Arc::new(Self {
+            engine: Mutex::new(engine),
+            risk: Mutex::new(RiskChecker::new(RiskConfig::default())),
+            pg: None,
+            events: tx,
+            admin_key: admin_key.into(),
         })
     }
 
