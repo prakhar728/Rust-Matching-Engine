@@ -1,0 +1,27 @@
+# Build artifacts — largest offender, must exclude or COPY . . takes forever
+target/
+
+# Runtime-generated files — not part of the image
+snapshots/
+*.key
+
+# Git history — not needed in the build context
+.git/
+.github/
+
+# Dev/docs — not needed at runtime
+logs/
+docs/
+tests/
+
+# Local env overrides
+.env
+.env.local
+docker-compose.override.yml
+
+# Editor noise
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
