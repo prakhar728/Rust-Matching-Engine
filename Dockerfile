@@ -1,27 +1,37 @@
-FROM rust:1.84-bookworm AS builder
+# ── Stage 1: build ────────────────────────────────────────────────────────────
+FROM rust:1.88-bookworm AS builder
 
-ARG APP_BIN=clob-api
 WORKDIR /app
 
-COPY . .
-RUN cargo build --release --bin ${APP_BIN}
+COPY Cargo.toml Cargo.lock ./
 
+RUN mkdir -p src/bin benches && \                                                                                         
+    echo 'fn main() {}' > src/main.rs && \                                                                                
+    echo 'fn main() {}' > src/bin/cli.rs && \                                                                             
+    echo 'fn main() {}' > benches/engine.rs && \                                                                          
+    cargo build --release --bin clob-api && \                                                                             
+    rm -rf src benches
+
+
+COPY src ./src
+COPY benches ./benches
+RUN touch src/main.rs && cargo build --release --bin clob-api
+
+# ── Stage 2: runtime ──────────────────────────────────────────────────────────
 FROM debian:bookworm-slim AS runtime
 
-ARG APP_BIN=clob-api
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates tini \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=builder /app/target/release/${APP_BIN} /usr/local/bin/${APP_BIN}
 
-ENV APP_BIN=${APP_BIN}
+COPY --from=builder /app/target/release/clob-api /usr/local/bin/clob-api
+
 ENV RUST_LOG=info
-ENV APP_PORT=8080
 
 EXPOSE 8080
 
 ENTRYPOINT ["/usr/bin/tini", "--"]
-CMD ["/bin/sh", "-c", "/usr/local/bin/${APP_BIN}"]
+CMD ["clob-api"]

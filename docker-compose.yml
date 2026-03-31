@@ -17,57 +17,24 @@ services:
       timeout: 5s
       retries: 10
 
-  redis:
-    image: redis:7
-    container_name: clob-redis
-    restart: unless-stopped
-    command: ["redis-server", "--appendonly", "yes"]
-    ports:
-      - "${REDIS_PORT:-6379}:6379"
-    volumes:
-      - redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
-  migrator:
-    image: postgres:16
-    container_name: clob-migrator
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://clob:clob@postgres:5432/clob}
-      MIGRATION_COMMAND: ${MIGRATION_COMMAND:-echo 'No migration command configured. Skipping migrations.'}
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["${MIGRATION_COMMAND}"]
-    restart: "no"
-
-  api:
+  engine:
     build:
       context: .
-      dockerfile: ${APP_DOCKERFILE:-Dockerfile}
-      args:
-        APP_BIN: ${APP_BIN:-clob-api}
-    container_name: clob-api
+      dockerfile: Dockerfile
+    container_name: clob-engine
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
-        condition: service_healthy
-      migrator:
-        condition: service_completed_successfully
     environment:
-      RUST_LOG: ${RUST_LOG:-info}
-      APP_PORT: ${APP_PORT:-8080}
+      # Engine connects to Postgres and runs CREATE TABLE IF NOT EXISTS on startup.
+      # No separate migration step needed.
       DATABASE_URL: ${DATABASE_URL:-postgres://clob:clob@postgres:5432/clob}
-      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      # Admin key for privileged endpoints — set a real secret in production.
+      ADMIN_KEY: ${ADMIN_KEY:-changeme}
+      RUST_LOG: ${RUST_LOG:-info}
     ports:
       - "${APP_PORT:-8080}:8080"
 
 volumes:
   pg_data:
-  redis_data:

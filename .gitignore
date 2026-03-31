@@ -13,6 +13,10 @@
 # Docker overrides
 docker-compose.override.yml
 
+# Runtime-generated engine data
+/snapshots/
+*.key
+
 # Logs and temp files
 *.log
 *.tmp
